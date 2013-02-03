@@ -1,0 +1,4 @@
+TYPEMAP
+
+GslBsplineWorkspace * T_PTROBJ
+GslBsplineDerivWorkspace * T_PTROBJ
