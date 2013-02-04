@@ -1,0 +1,294 @@
+##-*- Mode: Perl -*-
+
+use strict;
+use warnings;
+
+our $VERSION = '0.001';
+pp_setversion("'$VERSION'");
+
+pp_bless('PDL::GSL::Bspline');  # make the functions generated go into our namespace
+
+pp_add_exported qw( bspline_fit );
+
+pp_addpm({At=>'Top'}, <<'EO_TOPMATTER');
+
+=head1 NAME
+
+PDL::GSL::Bspline - PDL interface to B-Spline routines in GSL
+
+=head1 DESCRIPTION
+
+This is an interface to the bspline package present in the GNU
+Scientific Library. This module consists of a single high-level
+routine C<bspline_fit>. A partial, but currently unusable interface to
+the lower level functions is also present.
+
+=head1 SYNOPSIS
+
+   use PDL;
+   use PDL::GSL::Bspline;
+
+=head1 FUNCTIONS
+
+=head2 B<bspline_fit>
+
+=head3 Usage
+
+ $result = bspline_fit($x,$y,{OPTIONS});
+
+Perform a linear least squares fit of the data C<$x> and C<$y>
+to a b-spline specified by C<{OPTIONS}>. The results are returned
+in the hash reference C<$result>.
+
+=head3 Options
+
+=over
+
+
+=item k
+
+
+The order of the polynomial for each segment is C<k-1>. 
+The default value of C<k> is C<4>.
+
+
+=item ncoeffs
+
+The number of coefficients to fit. The number of break points used
+is C<ncoeffs + 2 - k>.
+
+
+=item xout
+
+
+A pdl of points at which to evaluate the fit function, and/or
+derivative. If C<xout> is omitted, then C<x> is used.
+
+
+=item yfit
+
+
+If true, compute the fit data and return it in C<< $result->{yfit} >>.
+The estimated error is returned in C<< $result->{yerr} >>. The default
+value is C<1> (true).
+
+
+=item yderiv
+
+If true, compute the first derivative of the fit function and return it in 
+C<< $result->{yderiv} >>. The estimated error is returned in C<< $result->{yderiv_err} >>.
+The default value is C<undef>.
+
+=back
+
+=head3 Example
+
+ use PDL;
+ use PDL::GSL::Bspline;
+ use PDL::GSL::RNG;
+
+ my $rng = PDL::GSL::RNG->new('mt19937');
+ $rng->set_seed(1);
+
+ my $N = 500;
+ my $x = zeroes($N)->xlinvals(0,15.0);
+ my $y0 = cos($x) * exp(-0.1*$x);
+ my $sigma = 0.1 * $y0;
+ my $dy = $rng->ran_gaussian_var($sigma);
+ my $y = $y0 + $dy;
+
+ my $res = bspline_fit($x,$y, { yderiv => 1, ncoeffs => 12, k => 4 });
+ wcols $x,$y0,$y,$res->{yfit},$res->{yerr},
+   $res->{yderiv},$res->{yderiv_err}, "fitresult.dat";
+
+
+=head1 SEE ALSO
+
+L<PDL>
+
+The GSL documentation is online at
+
+  http://sources.redhat.com/gsl/ref/gsl-ref_toc.html
+
+=head1 AUTHOR
+
+All files in this module copyright (C) 2013 John Lapeyre.
+
+This program is free software; you can redistribute it and/or modify it
+under the terms of either: the GNU General Public License as published
+by the Free Software Foundation; or the Artistic License.
+
+See http://dev.perl.org/licenses/ for more information.
+
+The GSL bspline code was written by Patrick Alken and Rhys Ulerich
+
+=cut
+
+$PDL::onlinedoc->scan(__FILE__) if $PDL::onlinedoc;
+
+sub bspline_fit {
+    my ($x,$y,$iopts) = @_;
+    my ($yfit,$yerr,$yderiv,$yderiv_err,$xout);
+    my $opt = new PDL::Options(
+        {
+            ncoeffs => 12,
+            k => 4,
+            xout => undef,
+            yfit => 1,
+            yerr => 1,
+            yderiv => undef,
+            yderiv_err => undef
+        }
+        );
+    $iopts = {} unless defined $iopts;
+    my $opts = $opt->options($iopts);
+    $xout = defined($opts->{xout}) ? $opts->{xout} : $x;
+    $yfit = zeroes($xout) if $opts->{yfit};
+    $yerr = zeroes($xout) if $opts->{yfit};
+    $yderiv = ones($xout) if $opts->{yderiv};
+    $yderiv_err = zeroes($xout) if $opts->{yderiv};
+    my $k = $opts->{k};
+    my $ncoeffs = $opts->{ncoeffs};
+    if (defined $yfit) {
+        if (defined $yderiv) {
+            PDL::GSL::Bspline::bspline_linear_fit_meat2($x,$y,$x,$yfit,$yderiv,$yerr,
+                                                        $yderiv_err,$ncoeffs,$k);
+        }
+        else {
+            PDL::GSL::Bspline::bspline_linear_fit_meat1($x,$y,$x,$yfit,$yerr,
+                                                        $ncoeffs,$k);
+        }
+    }
+    else {
+        if (defined $yderiv) {
+            PDL::GSL::Bspline::bspline_linear_fit_meat3($x,$y,$x,$yderiv,
+                                                        $yderiv_err,$ncoeffs,$k);
+        }
+    }
+    my %rh = ();
+    $rh{yfit} = $yfit if defined $yfit;
+    $rh{yerr} = $yerr if defined $yerr;
+    $rh{yderiv} = $yderiv if defined $yderiv;
+    $rh{yderiv_err} = $yderiv_err if defined $yderiv_err;
+    \%rh;
+}
+
+
+EO_TOPMATTER
+
+pp_addhdr('
+
+#include <math.h>
+#include <gsl/gsl_bspline.h>
+#include <gsl/gsl_multifit.h>
+#include <gsl/gsl_statistics.h>
+#include<gsl/gsl_errno.h>
+#include "gslerr.h"
+
+#include "bspline_pdl.c"
+
+/*
+#include <gsl/gsl_multifit.h>
+#include <gsl/gsl_rng.h>
+#include <gsl/gsl_randist.h>
+#include <gsl/gsl_statistics.h>
+*/
+
+/*
+#include<string.h>
+#include<math.h>
+#include<gsl/gsl_errno.h>
+#include<gsl/gsl_spline.h>
+#include "gslerr.h"
+*/
+
+typedef gsl_bspline_workspace GslBsplineWorkspace;
+typedef gsl_bspline_deriv_workspace GslBsplineDerivWorkspace;
+
+');
+
+pp_def('bspline_linear_fit_meat1',
+        Pars => 'double xin(n); double yin(n); double xout(m); double [o] yout(m);'
+          . ' double [o] yout_err(m) ' ,
+        OtherPars => 'int ncoeffs; int k;',
+        Doc => undef,
+	Code =>'
+         bspline_linear_fit($P(xin),$P(yin),$SIZE(n),$COMP(ncoeffs),$COMP(k),$P(xout),
+          $P(yout),NULL,$P(yout_err),NULL,$SIZE(m));
+');
+
+pp_def('bspline_linear_fit_meat2',
+        Pars => 'double xin(n); double yin(n); double xout(m); double [o] yout(m);'
+          . ' double [o] yderiv(m); double [o] yout_err(m); double [o] yout_deriv_err(m)' ,
+        OtherPars => 'int ncoeffs; int k;',
+        Doc => undef,
+	Code =>'
+         bspline_linear_fit($P(xin),$P(yin),$SIZE(n),$COMP(ncoeffs),$COMP(k),$P(xout),
+          $P(yout),$P(yderiv),$P(yout_err),$P(yout_deriv_err),$SIZE(m));
+');
+
+pp_def('bspline_linear_fit_meat3',
+        Pars => 'double xin(n); double yin(n); double xout(m); '
+          . ' double [o] yderiv(m); double [o] yout_deriv_err(m)' ,
+        OtherPars => 'int ncoeffs; int k;',
+        Doc => undef,
+	Code =>'
+         bspline_linear_fit($P(xin),$P(yin),$SIZE(n),$COMP(ncoeffs),$COMP(k),$P(xout),
+          NULL,$P(yderiv),NULL,$P(yout_deriv_err),$SIZE(m));
+');
+
+
+# XS functions for the BSPLINE objects
+
+pp_addxs('','
+MODULE = PDL::GSL::Bspline PACKAGE = PDL::GSL::Bspline
+
+GslBsplineWorkspace *
+new_bspline (k,nbreak)
+  size_t k
+  size_t nbreak
+ CODE:
+  GslBsplineWorkspace * bspline = NULL;
+  bspline = gsl_bspline_alloc(k, nbreak);
+  if (bspline == NULL){
+    barf("new_bspline: Unable to allocate bspline workspace.\n");
+  }
+  RETVAL = bspline;
+ OUTPUT:
+  RETVAL
+
+GslBsplineDerivWorkspace *
+new_bspline_deriv (k)
+  size_t k
+ CODE:
+  GslBsplineDerivWorkspace * bspline_deriv = NULL;
+  bspline_deriv = gsl_bspline_deriv_alloc(k);
+  if (bspline_deriv == NULL){
+    barf("new_bspline_deriv: Unable to allocate bspline derivative workspace.\n");
+  }
+  RETVAL = bspline_deriv;
+ OUTPUT:
+  RETVAL
+
+MODULE = PDL::GSL::Bspline PACKAGE = GslBsplineWorkspacePtr PREFIX = bspl_
+
+void
+bspl_DESTROY(bspline)
+  GslBsplineWorkspace * bspline
+ CODE:
+  fprintf(stderr, "Destroying bspline\n");
+  gsl_bspline_free(bspline);
+
+
+MODULE = PDL::GSL::Bspline PACKAGE = GslBsplineDerivWorkspacePtr PREFIX = bspld_
+
+void
+bspld_DESTROY(bspline_deriv)
+  GslBsplineDerivWorkspace * bspline_deriv
+ CODE:
+  gsl_bspline_deriv_free(bspline_deriv);
+
+');
+
+#pp_export_nothing;
+pp_done();
