@@ -22,9 +22,17 @@ my $y = $y0 + $dy;
 
 my $res;
 
-$res = bspline_fit($x,$y, { yderiv => 1, ncoeffs => 12, k => 4 });
-wcols $x,$y0,$y,$res->{yfit},$res->{yerr},
-    $res->{yderiv},$res->{yderiv_err}, $y0-$res->{yfit},"fittest4_12.dat";
+#my ($x1,$y1) = rcols 'splinetest.dat';
+my ($x1,$y1) = rcols 'checkcols.dat';
+
+$res = bspline_fit($x1,$y1, { yderiv => 1, ncoeffs => 12, k => 4 });
+
+wcols $x1,$y1,$res->{yfit},$res->{yerr},$res->{yderiv},$res->{yderiv_err}, 'tfit.dat';
+
+#wcols $x,$y0,$y,$res->{yfit},$res->{yerr},
+#    $res->{yderiv},$res->{yderiv_err}, $y0-$res->{yfit},"fittest4_12.dat";
+
+wcols $x,$y, 'splinetest.dat';
 
 #$res = bspline_fit($x,$y, { ncoeffs => 17, k => 4 });
 #wcols $x,$y0,$y,$res->{yfit},$res->{yerr},"fittest1.dat";

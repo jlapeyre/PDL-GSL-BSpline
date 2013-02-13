@@ -31,6 +31,7 @@ void bspline_linear_fit( BS_T *xin, BS_T *yin, int n, int ncoeffs, int k,
   x = (gsl_vector *) malloc(sizeof(gsl_vector));
   y = (gsl_vector *) malloc(sizeof(gsl_vector));
 
+  //  fprintf(stderr, "n %d, nout %d, nbreak %d, ncoeffs %d, k %d\n",n, nout, nbreak, ncoeffs, k);
   bw = gsl_bspline_alloc(k, nbreak);
   if (yout_deriv != NULL) dw = gsl_bspline_deriv_alloc(k);
   B = gsl_vector_alloc(ncoeffs);
@@ -64,16 +65,17 @@ void bspline_linear_fit( BS_T *xin, BS_T *yin, int n, int ncoeffs, int k,
           gsl_matrix_set(X, i, j, Bj);
         }
     }
+  //  fprintf(stderr, "starting fit\n"); fflush(stderr);
   //  gsl_multifit_wlinear(X, w, y, c, cov, &chisq, mw);
   gsl_multifit_linear(X, y, c, cov, &chisq, mw);
-
+  //  fprintf(stderr, "done fit\n");  fflush(stderr);
   dof = n - ncoeffs;
   //  tss = gsl_stats_wtss(w->data, 1, y->data, 1, y->size);
   tss = gsl_stats_tss(y->data, 1, y->size);
   Rsq = 1.0 - chisq / tss;
 
   //  fprintf(stderr, "chisq/dof = %e, Rsq = %f\n", 
-  //                   chisq / dof, Rsq);
+  //          chisq / dof, Rsq);
 
   {
     double yi, yerr;

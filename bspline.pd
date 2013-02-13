@@ -23,6 +23,10 @@ Scientific Library. This module consists of a single high-level
 routine C<bspline_fit>. A partial, but currently unusable interface to
 the lower level functions is also present.
 
+The function C<bspline_fit> fits a smoothing curve to a data set.
+This is useful when minimal knowledge of the underlying model is
+available.
+
 =head1 SYNOPSIS
 
    use PDL;
@@ -38,7 +42,8 @@ the lower level functions is also present.
 
 Perform a linear least squares fit of the data C<$x> and C<$y>
 to a b-spline specified by C<{OPTIONS}>. The results are returned
-in the hash reference C<$result>.
+in the hash reference C<$result>. The I<breakpoints> or I<knots>
+are spaced uniformly on the C<$x> data.
 
 =head3 Options
 
